@@ -266,8 +266,11 @@ database_adlist_number() {
 database_adlist_status() {
   # Only try to set the status when this field exists in the gravity database
   if ! gravity_column_exists "adlist" "status"; then
+    echo "Gravity status column is not found!"
     return;
   fi
+
+  echo "Gravity status column found and set to ${2} (ID ${1})"
 
   output=$( { printf ".timeout 30000\\nUPDATE adlist SET status = %i WHERE id = %i;\\n" "${2}" "${1}" | sqlite3 "${gravityDBfile}"; } 2>&1 )
   status="$?"
