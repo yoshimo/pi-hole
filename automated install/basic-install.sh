@@ -234,7 +234,7 @@ os_check() {
                 printf "      If you are seeing this message and you do have a supported OS, please contact support.\\n"
             fi
             printf "\\n"
-            printf "      %bhttps://docs.pi-hole.net/main/prerequesites/#supported-operating-systems%b\\n" "${COL_LIGHT_GREEN}" "${COL_NC}"
+            printf "      %bhttps://docs.pi-hole.net/main/prerequisites/#supported-operating-systems%b\\n" "${COL_LIGHT_GREEN}" "${COL_NC}"
             printf "\\n"
             printf "      If you wish to attempt to continue anyway, you can try one of the following commands to skip this check:\\n"
             printf "\\n"
@@ -305,7 +305,7 @@ package_manager_detect() {
             printf -v phpInsMinor "%d" "$(php <<< "<?php echo PHP_MINOR_VERSION ?>")"
             phpVer="php$phpInsMajor.$phpInsMinor"
         fi
-        # Packages required to perfom the os_check (stored as an array)
+        # Packages required to perform the os_check (stored as an array)
         OS_CHECK_DEPS=(grep dnsutils)
         # Packages required to run this install script (stored as an array)
         INSTALLER_DEPS=(git iproute2 whiptail ca-certificates)
