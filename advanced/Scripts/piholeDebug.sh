@@ -1321,10 +1321,13 @@ database_integrity_check(){
     local result
     local database="${1}"
 
+    log_write "${INFO} Checking integrity of ${database} ... (this can take several minutes)"
     result="$(pihole-FTL "${database}" "PRAGMA integrity_check" 2>&1)"
     if [[ ${result} = "ok" ]]; then
       log_write "${TICK} Integrity of ${database} intact"
 
+
+      log_write "${INFO} Checking foreign key constraints of ${database} ... (this can take several minutes)"
       unset result
       result="$(pihole-FTL sqlite3 "${database}" -cmd ".headers on" -cmd ".mode column" "PRAGMA foreign_key_check" 2>&1)"
       if [[ -z ${result} ]]; then
