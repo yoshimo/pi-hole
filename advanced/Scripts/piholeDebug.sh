@@ -1313,6 +1313,7 @@ analyze_ftl_db() {
     local ftl_permissions
     ftl_permissions=$(ls -lhd "${PIHOLE_FTL_DB_FILE}")
     log_write "${COL_GREEN}${ftl_permissions}${COL_NC}"
+
     database_integrity_check "$PIHOLE_FTL_DB_FILE"
 }
 

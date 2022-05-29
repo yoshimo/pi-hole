@@ -873,12 +873,16 @@ database_recovery() {
   local str="Checking integrity of existing gravity database"
   local option="${1}"
   echo -ne "  ${INFO} ${str}..."
-  if result="$(pihole-FTL sqlite3 "${gravityDBfile}" "PRAGMA integrity_check" 2>&1)"; then
+  result="$(pihole-FTL sqlite3 "${gravityDBfile}" "PRAGMA integrity_check" 2>&1)"
+
+  if [[ ${result} = "ok" ]]; then
     echo -e "${OVER}  ${TICK} ${str} - no errors found"
 
     str="Checking foreign keys of existing gravity database"
     echo -ne "  ${INFO} ${str}..."
-    if result="$(pihole-FTL sqlite3 "${gravityDBfile}" "PRAGMA foreign_key_check" 2>&1)"; then
+    unset result
+    result="$(pihole-FTL sqlite3 "${gravityDBfile}" "PRAGMA foreign_key_check" 2>&1)"
+    if [[ -z ${result} ]]; then
       echo -e "${OVER}  ${TICK} ${str} - no errors found"
       if [[ "${option}" != "force" ]]; then
         return
