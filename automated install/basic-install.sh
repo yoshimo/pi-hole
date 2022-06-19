@@ -317,7 +317,7 @@ package_manager_detect() {
         # Packages required to perfom the os_check (stored as an array)
         OS_CHECK_DEPS=(grep dnsutils)
         # Packages required to run this install script (stored as an array)
-        INSTALLER_DEPS=(git iproute2 whiptail ca-certificates)
+        INSTALLER_DEPS=(git iproute2 dialog ca-certificates)
         # Packages required to run Pi-hole (stored as an array)
         PIHOLE_DEPS=(cron curl iputils-ping psmisc sudo unzip idn2 libcap2-bin dns-root-data libcap2 netcat-openbsd procps)
         # Packages required for the Web admin interface (stored as an array)
@@ -634,40 +634,39 @@ get_available_interfaces() {
 # A function for displaying the dialogs the user sees when first running the installer
 welcomeDialogs() {
     # Display the welcome dialog using an appropriately sized window via the calculation conducted earlier in the script
-    whiptail --msgbox --backtitle "Welcome" --title "Pi-hole automated installer" "\\n\\nThis installer will transform your device into a network-wide ad blocker!" "${r}" "${c}"
-
-    # Request that users donate if they enjoy the software since we all work on it in our free time
-    whiptail --msgbox --backtitle "Plea" --title "Free and open source" "\\n\\nThe Pi-hole is free, but powered by your donations:  https://pi-hole.net/donate/" "${r}" "${c}"
-
-    # Explain the need for a static address
-    if whiptail --defaultno --backtitle "Initiating network interface" --title "Static IP Needed" --yesno "\\n\\nThe Pi-hole is a SERVER so it needs a STATIC IP ADDRESS to function properly.
-
-IMPORTANT: If you have not already done so, you must ensure that this device has a static IP. Either through DHCP reservation, or by manually assigning one. Depending on your operating system, there are many ways to achieve this.
-
-Choose yes to indicate that you have understood this message, and wish to continue" "${r}" "${c}"; then
-        #Nothing to do, continue
-        echo
-    else
-        printf "  %b Installer exited at static IP message.\\n" "${INFO}"
-        exit 1
-    fi
+    dialog --no-shadow --clear \
+        --backtitle "Welcome" \
+            --title "Pi-hole Automated Installer" \
+            --msgbox "\\n\\nThis installer will transform your device into a network-wide ad blocker!" \
+            "${r}" "${c}" \
+            --and-widget \
+        --backtitle "Support Pi-hole" \
+            --title "Open Source Software" \
+            --msgbox "\\n\\nThe Pi-hole is free, but powered by your donations:  https://pi-hole.net/donate/" \
+            "${r}" "${c}" \
+            --and-widget \
+        --colors --erase-on-exit \
+            --backtitle "Initiating network interface" \
+            --title "Static IP Needed" \
+            --no-button "Exit" --yes-button "Continue" \
+            --defaultno \
+            --yesno "\\n\\nThe Pi-hole is a SERVER so it needs a STATIC IP ADDRESS to function properly.\\n\\n \
+                \\Zb\\Z1IMPORTANT:\\Zn If you have not already done so, you must ensure that this device has a static IP.\\n \
+                Depending on your operating system, there are many ways to achieve this, through DHCP reservation, or by manually assigning one.\\n\\n \
+                Please continue when the static addressing has been configured." \
+            "${r}" "${c}" \
+        || { printf "  %b Installer exited at static IP message.\\n" "${INFO}"; exit 1; }
 }
 
 # A function that lets the user pick an interface to use with Pi-hole
 chooseInterface() {
-    # Turn the available interfaces into an array so it can be used with a whiptail dialog
-    local interfacesArray=()
+    # Turn the available interfaces into a string so it can be used with dialog
+    local interfacesList
     # Number of available interfaces
     local interfaceCount
-    # Whiptail variable storage
-    local chooseInterfaceCmd
-    # Temporary Whiptail options storage
-    local chooseInterfaceOptions
-    # Loop sentinel variable
-    local firstLoop=1
 
-    # Find out how many interfaces are available to choose from
-    interfaceCount=$(wc -l <<< "${availableInterfaces}")
+    # POSIX compliant way to get the number of elements in an array
+    interfaceCount=$(printf "%s\n" "${availableInterfaces}" | wc -l)
 
     # If there is one interface,
     if [[ "${interfaceCount}" -eq 1 ]]; then
@@ -675,33 +674,27 @@ chooseInterface() {
         PIHOLE_INTERFACE="${availableInterfaces}"
     # Otherwise,
     else
+        # Set status for the first entry to be selected
+        status="ON"
+
         # While reading through the available interfaces
-        while read -r line; do
-            # Use a variable to set the option as OFF to begin with
-            mode="OFF"
-            # If it's the first loop,
-            if [[ "${firstLoop}" -eq 1 ]]; then
-                # set this as the interface to use (ON)
-                firstLoop=0
-                mode="ON"
-            fi
-            # Put all these interfaces into an array
-            interfacesArray+=("${line}" "available" "${mode}")
-        # Feed the available interfaces into this while loop
-        done <<< "${availableInterfaces}"
-        # The whiptail command that will be run, stored in a variable
-        chooseInterfaceCmd=(whiptail --separate-output --radiolist "Choose An Interface (press space to toggle selection)" "${r}" "${c}" 6)
-        # Now run the command using the interfaces saved into the array
-        chooseInterfaceOptions=$("${chooseInterfaceCmd[@]}" "${interfacesArray[@]}" 2>&1 >/dev/tty) || \
-        # If the user chooses Cancel, exit
-        { printf "  %bCancel was selected, exiting installer%b\\n" "${COL_LIGHT_RED}" "${COL_NC}"; exit 1; }
-        # For each interface
-        for desiredInterface in ${chooseInterfaceOptions}; do
-            # Set the one the user selected as the interface to use
-            PIHOLE_INTERFACE=${desiredInterface}
-            # and show this information to the user
-            printf "  %b Using interface: %s\\n" "${INFO}" "${PIHOLE_INTERFACE}"
+        for interface in ${availableInterfaces}; do
+            # Put all these interfaces into a string
+            interfacesList="${interfacesList}${interface} available ${status} "
+            # All further interfaces are deselected
+            status="OFF"
         done
+        # shellcheck disable=SC2086
+        # Disable check for double quote here as we are passing a string with spaces
+        choosenInterface=$(dialog --no-shadow --clear --output-fd 1 \
+            --radiolist "Choose An Interface (press space to toggle selection)" \
+            ${r} ${c} "${interfaceCount}" ${interfacesList}) \
+        || { printf "  %bCancel was selected, exiting installer%b\\n" "${COL_LIGHT_RED}" "${COL_NC}"; exit 1; }
+
+        # Set the one the user selected as the interface to use
+        PIHOLE_INTERFACE=${choosenInterface}
+        # and show this information to the user
+        printf "  %b Using interface: %s\\n" "${INFO}" "${PIHOLE_INTERFACE}"
     fi
 }
 
@@ -787,21 +780,30 @@ getStaticIPv4Settings() {
     local ipSettingsCorrect
     local DHCPChoice
     # Ask if the user wants to use DHCP settings as their static IP
-    # This is useful for users that are using DHCP reservations; then we can just use the information gathered via our functions
-    DHCPChoice=$(whiptail --backtitle "Calibrating network interface" --title "Static IP Address" --menu --separate-output "Do you want to use your current network settings as a static address? \\n
-          IP address:    ${IPV4_ADDRESS} \\n
-          Gateway:       ${IPv4gw} \\n" "${r}" "${c}" 3\
-          "Yes" "Set static IP using current values" \
-          "No" "Set static IP using custom values" \
-          "Skip" "I will set a static IP later, or have already done so" 3>&2 2>&1 1>&3) || \
-          { printf "  %bCancel was selected, exiting installer%b\\n" "${COL_LIGHT_RED}" "${COL_NC}"; exit 1; }
+    # This is useful for users that are using DHCP reservations; we can use the information gathered
+    DHCPChoice=$(dialog --no-shadow --clear --output-fd 1 \
+        --backtitle "Calibrating network interface" \
+        --title "Static IP Address" \
+        --menu "Do you want to use your current network settings as a static address?\\n \
+            IP address:    ${IPV4_ADDRESS}\\n \
+            Gateway:       ${IPv4gw}\\n" \
+            "${r}" "${c}" 3 \
+            "Yes" "Set static IP using current values" \
+            "No" "Set static IP using custom values" \
+            "Skip" "I will set a static IP later, or have already done so") \
+        || { printf "  %bCancel was selected, exiting installer%b\\n" "${COL_LIGHT_RED}" "${COL_NC}"; exit 1; }
 
     case ${DHCPChoice} in
         "Yes")
         # If they choose yes, let the user know that the IP address will not be available via DHCP and may cause a conflict.
-        whiptail --msgbox --backtitle "IP information" --title "FYI: IP Conflict" "It is possible your router could still try to assign this IP to a device, which would cause a conflict.  But in most cases the router is smart enough to not do that.
-        If you are worried, either manually set the address, or modify the DHCP reservation pool so it does not include the IP you want.
-        It is also possible to use a DHCP reservation, but if you are going to do that, you might as well set a static address." "${r}" "${c}"
+        dialog --no-shadow --clear \
+            --backtitle "IP information" \
+            --title "FYI: IP Conflict" \
+            --msgbox "\\nIt is possible your router could still try to assign this IP to a device, which would cause a conflict. \
+                But in most cases the router is smart enough to not do that. \
+                If you are worried, either manually set the address, or modify the DHCP reservation pool so it does not include the IP you want. \
+                It is also possible to use a DHCP reservation, but if you are going to do that, you might as well set a static address." \
+            "${r}" "${c}"
         # Nothing else to do since the variables are already set above
         setDHCPCD
         ;;
@@ -813,21 +815,27 @@ getStaticIPv4Settings() {
         until [[ "${ipSettingsCorrect}" = True ]]; do
 
             # Ask for the IPv4 address
-            IPV4_ADDRESS=$(whiptail --backtitle "Calibrating network interface" --title "IPv4 address" --inputbox "Enter your desired IPv4 address" "${r}" "${c}" "${IPV4_ADDRESS}" 3>&1 1>&2 2>&3) || \
-            # Canceling IPv4 settings window
-            { ipSettingsCorrect=False; echo -e "  ${COL_LIGHT_RED}Cancel was selected, exiting installer${COL_NC}"; exit 1; }
-            printf "  %b Your static IPv4 address: %s\\n" "${INFO}" "${IPV4_ADDRESS}"
+            temp=$(dialog --no-shadow --clear --output-fd 1 \
+                --backtitle "Calibrating network interface" \
+                --title "IPv4 Address" \
+                --form "\\nEnter your desired IPv4 address" \
+                "${r}" "${c}" 0 \
+                    "IPv4 Address:" 1 1 "${IPV4_ADDRESS}" 1 15 19 0 \
+                    "IPv4 Gateway:" 2 1 "${IPv4gw}" 2 15 19 0) \
+            || { ipSettingsCorrect=False; echo -e "  ${COL_LIGHT_RED}Cancel was selected, exiting installer${COL_NC}"; exit 1; }
 
-            # Ask for the gateway
-            IPv4gw=$(whiptail --backtitle "Calibrating network interface" --title "IPv4 gateway (router)" --inputbox "Enter your desired IPv4 default gateway" "${r}" "${c}" "${IPv4gw}" 3>&1 1>&2 2>&3) || \
-            # Canceling gateway settings window
-            { ipSettingsCorrect=False; echo -e "  ${COL_LIGHT_RED}Cancel was selected, exiting installer${COL_NC}"; exit 1; }
-            printf "  %b Your static IPv4 gateway: %s\\n" "${INFO}" "${IPv4gw}"
+            IPV4_ADDRESS=${temp%$'\n'*}
+            IPv4gw=${temp#*$'\n'}
 
-            # Give the user a chance to review their settings before moving on
-            if whiptail --backtitle "Calibrating network interface" --title "Static IP Address" --yesno "Are these settings correct?
-                IP address: ${IPV4_ADDRESS}
-                Gateway:    ${IPv4gw}" "${r}" "${c}"; then
+                        # Give the user a chance to review their settings before moving on
+            if dialog --no-shadow \
+                --backtitle "Calibrating network interface" \
+                --title "Static IP Address" \
+                --defaultno \
+                --yesno "Are these settings correct?
+                    IP address: ${IPV4_ADDRESS}
+                    Gateway:    ${IPv4gw}" \
+                "${r}" "${c}"; then
                     # After that's done, the loop ends and we move on
                     ipSettingsCorrect=True
                 else
