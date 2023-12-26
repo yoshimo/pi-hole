@@ -561,9 +561,9 @@ gravity_DownloadBlocklistFromUrl() {
   fi
  
 
-  if [ -f "${piholeDir}/list.${id}.${domain}.etag" ]
+  if [ -f "${piholeDir}/list.${id}.${domain}.header" ]
 	then
-	  currentetag=$(<"${piholeDir}/list.${id}.${domain}.etag")
+	  currentetag=$(sed -n 's/^etag: //Ip' < "${piholeDir}/list.${id}.${domain}.header")
 	else
 	  currentetag=$""
   fi
@@ -573,17 +573,17 @@ gravity_DownloadBlocklistFromUrl() {
 # shellcheck disable=SC2086
   curl -sI "${url}" -L ${compression} ${cmd_ext} ${heisenbergCompensator} | sed -n 's/^etag: //Ip' > "${piholeDir}/list.${id}.${domain}.etag"
 
-if [ -z "$currentetag" ]
+  if [ -z "$currentetag" ]
 	then
-		httpCode=$(curl --connect-timeout ${curl_connect_timeout} -s -L ${compression} ${cmd_ext} ${heisenbergCompensator} -w "%{http_code}" "${url}" -o "${listCurlBuffer}" 2> /dev/null)
+		httpCode=$(curl --connect-timeout ${curl_connect_timeout} -s -L ${compression} ${cmd_ext} ${heisenbergCompensator} -w "%{http_code}" "${url}" -o "${listCurlBuffer}" -D "${piholeDir}/list.${id}.${domain}.header" 2> /dev/null)
 	else
-		httpCode=$(curl --connect-timeout ${curl_connect_timeout} -s -L ${compression} ${cmd_ext} --header "If-None-Match: ${currentetag}" -w "%{http_code}" "${url}" -o "${listCurlBuffer}" 2> /dev/null)
- fi
+		httpCode=$(curl --connect-timeout ${curl_connect_timeout} -s -L ${compression} ${cmd_ext} --header "If-None-Match: ${currentetag}" -w "%{http_code}" "${url}" -o "${listCurlBuffer}" -D "${piholeDir}/list.${id}.${domain}.header" 2>> /dev/null)
+  fi
 
-# if [ "${httpCode}" != 304 ]
-# then
+#  if [ "${httpCode}" != 304 ]
+#   then
 #	echo -e "\n statuscode: " "$httpCode"
-#	newetag=$(<"${piholeDir}/list.${id}.${domain}.etag")
+#	newetag=$(cat "${piholeDir}/list.${id}.${domain}.header"|sed -n 's/^etag: //Ip')
 #	echo -e "\n new Etag:     " "$newetag"
 #  fi
 
